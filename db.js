@@ -5,18 +5,33 @@ const path = require('path');
 const dbPath = path.join(__dirname, 'inventory.db');
 
 // 创建数据库连接
-const db = new sqlite3.Database(dbPath, (err) => {
-  if (err) {
-    console.error('Error opening database:', err.message);
-  } else {
-    console.log('Connected to the SQLite database.');
-    // 初始化表结构
-    initTables();
-  }
-});
+let db;
+try {
+  db = new sqlite3.Database(dbPath, (err) => {
+    if (err) {
+      console.error('Error opening database:', err.message);
+      // 在Vercel环境中，文件系统可能是只读的，这里添加容错处理
+      console.log('Using in-memory database as fallback');
+      db = new sqlite3.Database(':memory:');
+      initTables();
+    } else {
+      console.log('Connected to the SQLite database.');
+      // 初始化表结构
+      initTables();
+    }
+  });
+} catch (error) {
+  console.error('Failed to create database connection:', error.message);
+  // 使用内存数据库作为 fallback
+  console.log('Using in-memory database as fallback');
+  db = new sqlite3.Database(':memory:');
+  initTables();
+}
 
 // 初始化表结构
 function initTables() {
+  if (!db) return;
+  
   // 商品表
   db.run(`
     CREATE TABLE IF NOT EXISTS products (
@@ -26,7 +41,9 @@ function initTables() {
       type TEXT NOT NULL,
       unit TEXT NOT NULL
     )
-  `);
+  `, (err) => {
+    if (err) console.error('Error creating products table:', err.message);
+  });
 
   // 库存表
   db.run(`
@@ -39,7 +56,9 @@ function initTables() {
       expiry_date DATE NOT NULL,
       FOREIGN KEY (product_id) REFERENCES products(id)
     )
-  `);
+  `, (err) => {
+    if (err) console.error('Error creating inventory table:', err.message);
+  });
 
   // 入库记录
   db.run(`
@@ -53,7 +72,9 @@ function initTables() {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (product_id) REFERENCES products(id)
     )
-  `);
+  `, (err) => {
+    if (err) console.error('Error creating inbound table:', err.message);
+  });
 
   // 出库记录
   db.run(`
@@ -65,7 +86,9 @@ function initTables() {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (product_id) REFERENCES products(id)
     )
-  `);
+  `, (err) => {
+    if (err) console.error('Error creating outbound table:', err.message);
+  });
 
   console.log('Database tables initialized.');
 }
