@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>入库管理</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #f4f4f4;
+    }
+    .container {
+      max-width: 600px;
+      margin: 20px auto;
+      padding: 20px;
+      background-color: white;
+      border-radius: 8px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    h1 {
+      text-align: center;
+      color: #333;
+      font-size: 24px;
+    }
+    form {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    label {
+      font-weight: bold;
+      font-size: 14px;
+    }
+    input, select {
+      padding: 12px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 16px;
+    }
+    button {
+      padding: 14px;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      font-size: 16px;
+      cursor: pointer;
+      transition: background-color 0.3s;
+    }
+    button:hover {
+      background-color: #45a049;
+    }
+    .message {
+      padding: 10px;
+      margin: 10px 0;
+      border-radius: 4px;
+    }
+    .success {
+      background-color: #d4edda;
+      color: #155724;
+    }
+    .error {
+      background-color: #f8d7da;
+      color: #721c24;
+    }
+    a {
+      display: block;
+      text-align: center;
+      margin-top: 20px;
+      color: #4CAF50;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    .scan-button {
+      background-color: #2196F3;
+      margin-top: 5px;
+    }
+    .scan-button:hover {
+      background-color: #0b7dda;
+    }
+    #video-container {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: black;
+      z-index: 1000;
+    }
+    #video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    #close-scan {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background-color: rgba(255,255,255,0.8);
+      color: #333;
+      border: none;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      font-size: 20px;
+      cursor: pointer;
+    }
+    @media (max-width: 768px) {
+      .container {
+        margin: 10px;
+        padding: 15px;
+      }
+      h1 {
+        font-size: 20px;
+      }
+      input, select, button {
+        font-size: 14px;
+        padding: 10px;
+      }
+    }
+  </style>
+  <script src="https://unpkg.com/@zxing/library@0.20.0/umd/index.min.js"></script>
+</head>
+<body>
+  <div class="container">
+    <h1>入库管理</h1>
+    <div id="message" class="message" style="display: none;"></div>
+    <form id="inboundForm">
+      <div class="form-group">
+        <label for="barcode">条码</label>
+        <input type="text" id="barcode" name="barcode" placeholder="扫描或输入条码" required autofocus>
+        <button type="button" class="scan-button" onclick="startScan()">手机扫码</button>
+      </div>
+      <div class="form-group">
+        <label for="name">商品名称</label>
+        <input type="text" id="name" name="name" placeholder="输入商品名称" required>
+      </div>
+      <div class="form-group">
+        <label for="type">类型</label>
+        <select id="type" name="type" required>
+          <option value="">请选择</option>
+          <option value="农药">农药</option>
+          <option value="化肥">化肥</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="unit">单位</label>
+        <input type="text" id="unit" name="unit" placeholder="如：瓶、袋、箱" required>
+      </div>
+      <div class="form-group">
+        <label for="batchNumber">批次号</label>
+        <input type="text" id="batchNumber" name="batchNumber" placeholder="输入批次号" required>
+      </div>
+      <div class="form-group">
+        <label for="quantity">数量</label>
+        <input type="number" id="quantity" name="quantity" min="1" placeholder="输入数量" required>
+      </div>
+      <div class="form-group">
+        <label for="productionDate">生产日期</label>
+        <input type="date" id="productionDate" name="productionDate" required>
+      </div>
+      <div class="form-group">
+        <label for="expiryDate">过期日期</label>
+        <input type="date" id="expiryDate" name="expiryDate" required>
+      </div>
+      <button type="submit">确认入库</button>
+    </form>
+    <a href="/">返回首页</a>
+    <p style="text-align: center; font-size: 12px; color: #666; margin-top: 20px;">提示：在手机浏览器中可添加到主屏幕，获得接近APP的体验</p>
+  </div>
+  
+  <!-- 扫码视频容器 -->
+  <div id="video-container">
+    <video id="video" autoplay></video>
+    <button id="close-scan" onclick="stopScan()">×</button>
+  </div>
+
+  <script>
+    let codeReader;
+    let scanning = false;
+
+    function startScan() {
+      const videoContainer = document.getElementById('video-container');
+      videoContainer.style.display = 'block';
+      
+      codeReader = new ZXing.BrowserMultiFormatReader();
+      codeReader.listVideoInputDevices()
+        .then(videoInputDevices => {
+          if (videoInputDevices.length === 0) {
+            stopScan();
+            alert('未检测到摄像头设备');
+            return;
+          }
+          const firstDeviceId = videoInputDevices[0].deviceId;
+          codeReader.decodeFromVideoDevice(firstDeviceId, 'video', (result, err) => {
+            if (result) {
+              document.getElementById('barcode').value = result.text;
+              stopScan();
+              // 自动查询商品信息
+              const barcode = result.text;
+              if (barcode) {
+                fetch('/api/scan', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json'
+                  },
+                  body: JSON.stringify({ barcode })
+                })
+                .then(response => response.json())
+                .then(data => {
+                  if (data.found) {
+                    document.getElementById('name').value = data.product.name;
+                    document.getElementById('type').value = data.product.type;
+                    document.getElementById('unit').value = data.product.unit;
+                  }
+                });
+              }
+            }
+          });
+        })
+        .catch(err => {
+          console.error(err);
+          stopScan();
+          alert('无法访问摄像头，请检查权限。\n\n解决方案：\n1. 在浏览器中允许摄像头权限\n2. 使用HTTPS协议访问（部署到Vercel或Netlify）\n3. 直接手动输入条码');
+        });
+    }
+
+    function stopScan() {
+      if (codeReader) {
+        codeReader.reset();
+      }
+      const videoContainer = document.getElementById('video-container');
+      videoContainer.style.display = 'none';
+    }
+
+    document.getElementById('barcode').addEventListener('input', function() {
+      const barcode = this.value.trim();
+      if (barcode) {
+        fetch('/api/scan', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ barcode })
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.found) {
+            document.getElementById('name').value = data.product.name;
+            document.getElementById('type').value = data.product.type;
+            document.getElementById('unit').value = data.product.unit;
+          }
+        });
+      }
+    });
+
+    document.getElementById('inboundForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+      const formData = new FormData(this);
+      const data = Object.fromEntries(formData);
+      
+      fetch('/api/inbound', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+      })
+      .then(response => response.json())
+      .then(data => {
+        const messageDiv = document.getElementById('message');
+        messageDiv.style.display = 'block';
+        if (data.success) {
+          messageDiv.className = 'message success';
+          messageDiv.textContent = data.message;
+          this.reset();
+        } else {
+          messageDiv.className = 'message error';
+          messageDiv.textContent = data.message || '入库失败';
+        }
+      });
+    });
+  </script>
+</body>
+</html>
